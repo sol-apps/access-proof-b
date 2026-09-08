@@ -1,31 +1,47 @@
 /// <reference path="../pb_data/types.d.ts" />
 /*
- * main.pb.js — server-side hooks for {{SLUG}}. THIS FILE RUNS ON THE SERVER.
+ * main.pb.js — server-side hooks for access-proof-b.
  *
- * Runtime is PocketBase 0.39's embedded Goja VM: no npm, no Node APIs, no async.
- * You get PocketBase's own helpers — $app, routerAdd, cronAdd, onRecordCreate,
- * $os.getenv and so on. Docs: https://pocketbase.io/docs/js-overview/
+ * Two read-only routes, both returning invented demonstration content. They exist to
+ * prove that the access decision happens HERE, on the server, and not in the page:
  *
- * Two rules that are enforced by CI, not just style:
+ *   GET /api/proof/message   any authenticated caller           401 otherwise
+ *   GET /api/proof/admin     authenticated callers whose        403 for ordinary users,
+ *                            server-set role is "admin"         401 for unauthenticated
  *
- * 1. Handlers run in ISOLATED POOLED VMs. Nothing at the top level of this file is
- *    visible inside a handler — not functions, and not consts either. Shared code
- *    lives in pb_hooks/lib/*.js and is pulled in INSIDE each handler:
+ * `e.auth` is the record PocketBase resolved from the bearer token, and `role` on it is
+ * written by pb_hooks/identity.pb.js from the identity provider's claim at each login.
+ * Nothing in the request can influence either, which is the only reason this is a
+ * control rather than a decoration.
  *
- *      routerAdd("GET", "/api/things", (e) => {
- *        const things = require(__hooks + "/lib/things.js");
- *        return e.json(200, things.list(e.app));
- *      });
- *
- * 2. The app may only do what spec.json says it does. Outbound network calls,
- *    scheduled jobs and process access each require a matching declaration in the
- *    spec — see AGENT.md for exactly which. Adding the capability without adding
- *    the declaration fails the build, and so does the reverse of that trade:
- *    quietly widening the spec to match code the reviewer never agreed to.
- *
- * Runtime configuration arrives as environment variables, read with
- * $os.getenv("MY_KEY"). Never commit a secret to this repo — it is public.
+ * Refusals are logged without identifying who was refused: the spec's audience is test
+ * users, and a demo app has no business accumulating a record of who pressed what.
  */
 
-// Nothing yet. Delete this comment when the app grows a server side; an app that
-// needs no hooks should ship this file empty rather than pretend otherwise.
+routerAdd("GET", "/api/proof/message", (e) => {
+  if (!e.auth) {
+    console.log("[proof] refusing /api/proof/message — no authenticated caller");
+    throw new UnauthorizedError("sign in to read this message");
+  }
+
+  return e.json(200, {
+    message: "Invented demonstration content: the depot kettle passed its safety check on Tuesday.",
+    visible_to: "any signed-in user of this app",
+  });
+});
+
+routerAdd("GET", "/api/proof/admin", (e) => {
+  if (!e.auth) {
+    console.log("[proof] refusing /api/proof/admin — no authenticated caller");
+    throw new UnauthorizedError("sign in to read this message");
+  }
+  if (e.auth.get("role") !== "admin") {
+    console.log("[proof] refusing /api/proof/admin — caller is not an admin of this app");
+    throw new ForbiddenError("this message is for admins of this app");
+  }
+
+  return e.json(200, {
+    message: "Invented demonstration content: the imaginary depot's biscuit budget is twelve tins a quarter.",
+    visible_to: "admins of this app only",
+  });
+});

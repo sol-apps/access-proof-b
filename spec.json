@@ -1,0 +1,15 @@
+{
+  "title": "Access Proof B",
+  "slug": "access-proof-b",
+  "description": "A minimal acceptance-test app that demonstrates platform sign-in, shows the signed-in person their own name and role, and proves two read-only server-side access checks: one authenticated endpoint and one admin-only endpoint.",
+  "runtime_shape": "identity",
+  "data_reach": "own",
+  "blast_radius": "low",
+  "scopes": [
+    "read:own-identity",
+    "read:proof-message",
+    "read:proof-admin-message"
+  ],
+  "tier": "green",
+  "rationale": "The app invents all of its content, creates no collections, writes nothing, makes no outbound calls and runs no schedule. It does display personal data, but only the caller's own display name and role as supplied by the platform identity layer — there is no directory, no listing of other people, and no export — so the personal-data exposure is self-only and does not widen the blast radius beyond the single signed-in session. Audience is limited to explicitly granted test users by the identity provider's per-app grant, which the app itself cannot alter."
+}

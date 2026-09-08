@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{TITLE}}</title>
-<meta name="description" content="{{DESCRIPTION}}">
+<title>Access Proof B</title>
+<meta name="description" content="A minimal acceptance-test app that demonstrates platform sign-in, shows the signed-in person their own name and role, and proves two read-only server-side access checks.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%2316A45A' fill-rule='evenodd' d='M26 6h48a20 20 0 0 1 20 20v48a20 20 0 0 1-20 20H26A20 20 0 0 1 6 74V26A20 20 0 0 1 26 6Zm24 28a16 16 0 1 0 0 32 16 16 0 0 0 0-32Z'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,12 +24,21 @@
 .stage { max-width: var(--content-max); margin: 0 auto; padding: var(--space-6); }
 .stage h1 { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 var(--space-2); }
 .stage .lede { color: var(--text-muted); font-size: var(--text-base); margin: 0 0 var(--space-6); max-width: 62ch; }
+.stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.who-line { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.who-name { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; }
+.probe-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-2); }
+.probe-head .route { font-family: var(--font-code); font-size: var(--text-sm); }
+.probe-head .btn { margin-left: auto; }
+.probe-note { color: var(--text-muted); font-size: var(--text-sm); margin: 0 0 var(--space-3); max-width: 62ch; }
+.result { display: flex; flex-direction: column; gap: var(--space-2); }
+.result pre { margin: 0; border-radius: var(--radius-md); white-space: pre-wrap; word-break: break-word; }
 </style>
 </head>
 <body>
 
 <header class="topbar">
-  <a class="brand" href="./"><span class="brand-mark"></span><span>{{TITLE}}</span></a>
+  <a class="brand" href="./"><span class="brand-mark"></span><span>Access Proof B</span></a>
   <div style="margin-left:auto"></div>
   <!-- Identity. Everyone here has already been let in by the identity provider, so
        this says who they are; it is not the access check. -->
@@ -40,14 +49,38 @@
 </header>
 
 <main class="stage">
-  <h1>{{TITLE}}</h1>
-  <p class="lede">{{DESCRIPTION}}</p>
+  <h1>Access proof</h1>
+  <p class="lede">An acceptance test for platform identity. Sign in, see who the server thinks you are, then call two read-only endpoints and watch the server allow or refuse each one. All content below is invented.</p>
 
-  <div class="card card--pad">
-    <div class="empty">
-      <h4>Nothing here yet</h4>
-      <p>Replace this starter with the app itself. Keep the design system, drop the scaffolding.</p>
+  <div class="stack">
+
+    <div class="card card--pad">
+      <div class="t-label">Signed-in person</div>
+      <div id="identity-out" class="who-line" style="margin-top: var(--space-3)">
+        <span class="t-muted">Checking your session.</span>
+      </div>
     </div>
+
+    <div class="card card--pad">
+      <div class="probe-head">
+        <span class="route">GET /api/proof/message</span>
+        <span class="badge">Any signed-in user</span>
+        <button class="btn btn--secondary btn--sm" id="call-message">Call endpoint</button>
+      </div>
+      <p class="probe-note">The server refuses this unless the request carries a valid session. Try it signed out to see the refusal.</p>
+      <div class="result" id="result-message"><span class="t-faint">Not called yet.</span></div>
+    </div>
+
+    <div class="card card--pad">
+      <div class="probe-head">
+        <span class="route">GET /api/proof/admin</span>
+        <span class="badge">Admins of this app only</span>
+        <button class="btn btn--secondary btn--sm" id="call-admin">Call endpoint</button>
+      </div>
+      <p class="probe-note">The server checks the role written onto your record by the identity provider at sign-in. Ordinary users get 403, unauthenticated callers get 401. The button stays available either way, because seeing the refusal is the proof.</p>
+      <div class="result" id="result-admin"><span class="t-faint">Not called yet.</span></div>
+    </div>
+
   </div>
 </main>
 
@@ -57,6 +90,7 @@
 const $who = document.getElementById('who');
 const $in = document.getElementById('sign-in');
 const $out = document.getElementById('sign-out');
+const $identity = document.getElementById('identity-out');
 
 PBAuth.onChange((user) => {
   $in.hidden = !!user;
@@ -65,15 +99,93 @@ PBAuth.onChange((user) => {
   if (user) {
     $who.textContent = user.name || user.email;
     // PBAuth.isAdmin() is server-set from the grant, so it is safe to branch on for
-    // what to SHOW. What an admin may DO is still enforced by collection rules.
+    // what to SHOW. What an admin may DO is still enforced on the server.
     if (PBAuth.isAdmin()) $who.textContent += ' — admin';
   }
+  renderIdentity(user);
 });
 
-$in.addEventListener('click', () => PBAuth.signIn().catch((err) => {
-  console.error('[app] sign-in failed', err);
-}));
+function renderIdentity(user) {
+  $identity.replaceChildren();
+  if (!user) {
+    const msg = document.createElement('span');
+    msg.className = 't-muted';
+    msg.textContent = 'You are not signed in. Sessions last thirty minutes and are not renewed silently, so this is also what you see when one lapses.';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn--primary btn--sm';
+    btn.textContent = 'Sign in';
+    btn.addEventListener('click', startSignIn);
+    $identity.append(msg, btn);
+    return;
+  }
+  const name = document.createElement('span');
+  name.className = 'who-name';
+  name.textContent = user.name || user.email || user.id;
+  const role = document.createElement('span');
+  role.className = 'badge ' + (PBAuth.isAdmin() ? 'badge--green' : 'badge--amber');
+  role.textContent = 'Role in this app: ' + (user.role || 'unknown');
+  const note = document.createElement('span');
+  note.className = 't-faint';
+  note.textContent = 'Set by the identity provider at sign-in, not by this page.';
+  $identity.append(name, role, note);
+}
+
+function startSignIn() {
+  PBAuth.signIn().catch((err) => {
+    console.error('[app] sign-in failed', err);
+    GL.toast('Sign-in did not complete');
+  });
+}
+
+$in.addEventListener('click', startSignIn);
 $out.addEventListener('click', () => PBAuth.signOut());
+
+// Deliberately hand-rolled rather than routed through the SDK: the point of this app
+// is to show the raw status code the server chose, including the refusals the SDK
+// would otherwise turn into a thrown error.
+async function callProof(path, target) {
+  target.replaceChildren();
+  const pending = document.createElement('span');
+  pending.className = 't-faint';
+  pending.textContent = 'Calling ' + path;
+  target.append(pending);
+
+  const token = PBAuth.getClient().authStore.token;
+  let res, body;
+  try {
+    res = await fetch(path, { headers: token ? { Authorization: token } : {} });
+    body = await res.text();
+  } catch (err) {
+    console.error('[app] request failed', err);
+    target.replaceChildren();
+    const failed = document.createElement('span');
+    failed.className = 't-muted';
+    failed.textContent = 'The request could not be sent: ' + err;
+    target.append(failed);
+    return;
+  }
+
+  const status = document.createElement('span');
+  status.className = 'badge ' + (res.ok ? 'badge--green' : 'badge--red');
+  status.textContent = res.status + ' ' + (res.ok ? 'allowed by the server' : 'refused by the server');
+
+  const pre = document.createElement('pre');
+  pre.className = 'code';
+  try {
+    pre.textContent = JSON.stringify(JSON.parse(body), null, 2);
+  } catch (err) {
+    pre.textContent = body;
+  }
+
+  target.replaceChildren(status, pre);
+}
+
+document.getElementById('call-message').addEventListener('click', () => {
+  callProof('/api/proof/message', document.getElementById('result-message'));
+});
+document.getElementById('call-admin').addEventListener('click', () => {
+  callProof('/api/proof/admin', document.getElementById('result-admin'));
+});
 </script>
 
 </body>
